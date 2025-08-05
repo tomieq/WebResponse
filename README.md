@@ -34,7 +34,7 @@ import PackageDescription
 let package = Package(
     name: "MyServer",
     dependencies: [
-        .package(url: "https://github.com/tomieq/WebResponse.git", .upToNextMajor(from: "3.1.0"))
+        .package(url: "https://github.com/tomieq/WebResponse.git", branch: "master")
     ]
 )
 ```

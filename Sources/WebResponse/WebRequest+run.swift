@@ -60,10 +60,17 @@ extension WebRequest {
                 return
             }
             let statusCode = response.statusCode
+            let headers = response.allHeaderFields as? [String: String] ?? [:]
+
             if statusCode >= 200, statusCode < 300 {
-                if let json = data, let object = try? T(json: json) {
-                    let headers = response.allHeaderFields as? [String: String] ?? [:]
-                    callback(.response(body: object, headers: headers))
+                if let json = data {
+                    if json.isEmpty {
+                        callback(.response(body: nil, headers: headers))
+                    } else if let object = try? T(json: json) {
+                        callback(.response(body: object, headers: headers))
+                    } else {
+                        callback(.failure(.unserializablaResponse(data)))
+                    }
                 } else {
                     callback(.failure(.unserializablaResponse(data)))
                 }
