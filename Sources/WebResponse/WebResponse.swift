@@ -2,11 +2,11 @@ import Foundation
 
 public typealias WebObject = Decodable
 
-public struct EmptyBody: Decodable {}
+public struct EmptyBody: WebObject {}
 
 public enum WebResponse<T: WebObject> {
     case failure(HttpError)
-    case response(body: T?, headers: [String: String])
+    case response(body: T, headers: [String: String])
     
     public static var `default`: WebRequest<T> {
         WebRequest()
