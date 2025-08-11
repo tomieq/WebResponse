@@ -65,8 +65,7 @@ extension WebRequest {
                 if let json = data {
                     if json.isEmpty, "\(T.self)" == "\(EmptyBody.self)" {
                         callback(.response(body: try! .init(json: "{}"), headers: headers))
-                    } else
-                    if let object = try? T(json: json) {
+                    } else if let object = try? T(json: json) {
                         callback(.response(body: object, headers: headers))
                     } else {
                         callback(.failure(.unserializablaResponse(data)))
