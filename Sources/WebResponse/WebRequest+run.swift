@@ -5,6 +5,9 @@
 //  Created by Tomasz on 05/08/2025.
 //
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 extension WebRequest {
     private static var defaultHeaders: [String: String] {
