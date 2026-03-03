@@ -16,6 +16,7 @@ public enum HttpError: Error, Equatable, Sendable {
     case dnsError
     case sslError
     case invalidHttpCode(code: Int, body: String?)
+    case proxyError
     case other
 }
 
@@ -39,6 +40,8 @@ extension HttpError {
         case NSURLErrorNotConnectedToInternet,
              NSURLErrorNetworkConnectionLost:
             httpError = HttpError.noInternet
+        case 310:
+            return .proxyError
         default:
             httpError = HttpError.other
         }

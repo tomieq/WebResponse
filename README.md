@@ -22,6 +22,13 @@ WebResponse<EmptyBody>.default.get(url: "https://jsonplaceholder.typicode.com/to
 ```swift
 let response = WebResponse<SampleDto>.withTimeout(3).get(url: "https://jsonplaceholder.typicode.com/todos/1")
 ```
+### Use proxy
+```swift
+let response = WebResponse<SampleDto>
+    .withTimeout(3)
+    .withProxy(host: "localhost", port: 3128)
+    .get(url: "https://jsonplaceholder.typicode.com/todos/1")
+```
 ### Empty response
 ```swift
 let response = WebResponse<EmptyBody>.withTimeout(3).get(url: "https://jsonplaceholder.typicode.com/todos/1")
