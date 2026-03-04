@@ -15,11 +15,15 @@ public struct WebRequest<T: WebObject>: Sendable {
         self.proxy = proxy
     }
     
-    public func withProxy(host: String, port: Int) -> WebRequest<T> {
-        WebRequest(timeout: self.timeout, proxy: WebProxy(host: host, port: port))
-    }
-    
     public func withTimeout(_ timeout: TimeInterval) -> WebRequest<T> {
         WebRequest(timeout: timeout, proxy: self.proxy)
     }
 }
+
+#if MACOS
+public extension WebRequest {
+    func withProxy(host: String, port: Int) -> WebRequest<T> {
+        WebRequest(timeout: self.timeout, proxy: WebProxy(host: host, port: port))
+    }
+}
+#endif

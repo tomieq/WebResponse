@@ -52,7 +52,7 @@ extension WebRequest {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = self.timeout
         config.timeoutIntervalForResource = self.timeout
-        
+#if MACOS
         if let proxy = self.proxy {
             let proxyConfig: [AnyHashable: Any] = [
                 kCFNetworkProxiesHTTPSEnable: 1,
@@ -65,6 +65,7 @@ extension WebRequest {
             ]
             config.connectionProxyDictionary = proxyConfig
         }
+#endif
         let task = URLSession(configuration: config).dataTask(with: request) { data, response, error in
             if let error = error as? NSError {
                 let httpError = HttpError.make(from: error.code)
