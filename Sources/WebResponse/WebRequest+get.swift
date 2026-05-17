@@ -10,6 +10,10 @@ public extension WebRequest {
         run(url: url, method: "GET", headers: headers)
     }
 
+    func get(url: String, headers: [String: String]? = nil) async -> WebResponse<T> {
+        await run(url: url, method: "GET", headers: headers)
+    }
+
     func get(url: String, headers: [String: String]? = nil, callback: @escaping @Sendable (WebResponse<T>) -> Void) {
         _ = run(url: url, method: "GET", headers: headers, callback: callback)
     }
