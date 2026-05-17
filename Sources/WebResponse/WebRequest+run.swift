@@ -13,7 +13,7 @@ extension WebRequest {
     private static var defaultHeaders: [String: String] {
         ["Content-Type": "application/json"]
     }
-    
+
     func run(url: String, method: String, body: Data? = nil, headers: [String: String]? = nil) -> WebResponse<T> {
         let semaphore = DispatchSemaphore(value: 0)
         var result: WebResponse<T>?
@@ -29,7 +29,7 @@ extension WebRequest {
         }
         return result ?? .failure(.other)
     }
-    
+
     func run(url: String,
              method: String,
              body: Data? = nil,
@@ -52,20 +52,20 @@ extension WebRequest {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = self.timeout
         config.timeoutIntervalForResource = self.timeout
-#if MACOS
+        #if MACOS
         if let proxy = self.proxy {
             let proxyConfig: [AnyHashable: Any] = [
                 kCFNetworkProxiesHTTPSEnable: 1,
                 kCFNetworkProxiesHTTPSProxy: proxy.host,
                 kCFNetworkProxiesHTTPSPort: proxy.port,
-                
+
                 kCFNetworkProxiesHTTPEnable: 1,
                 kCFNetworkProxiesHTTPProxy: proxy.host,
                 kCFNetworkProxiesHTTPPort: proxy.port
             ]
             config.connectionProxyDictionary = proxyConfig
         }
-#endif
+        #endif
         let task = URLSession(configuration: config).dataTask(with: request) { data, response, error in
             if let error = error as? NSError {
                 let httpError = HttpError.make(from: error.code)
