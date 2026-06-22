@@ -27,21 +27,6 @@ func example() throws {
     _ = sem.wait(timeout: .now() + 4)
 }
 
-@Test func digest() throws {
-    let sem = DispatchSemaphore(value: 0)
-    DispatchQueue.global().async {
-        let response = WebResponse<EmptyBody>.withTimeout(10).get(url: "https://httpbin.org/basic-auth/admin/pass")
-        switch response {
-        case .failure(let error):
-            print("Error: \(error)")
-        case .response(body: let body, _):
-            print(body)
-        }
-        sem.signal()
-    }
-    _ = sem.wait(timeout: .now() + 12)
-}
-
 @Test func asyncGetReturnsInvalidUrl() async throws {
     let response = await WebResponse<EmptyBody>.default.get(url: "http://[::1")
 

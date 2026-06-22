@@ -14,6 +14,9 @@ let package = Package(
             name: "WebResponse",
             targets: ["WebResponse"])
     ],
+    dependencies: [
+        .package(url: "https://github.com/tomieq/swifter.git", .upToNextMajor(from: "3.2.0"))
+    ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
         // Targets can depend on other targets in this package and products from dependencies.
@@ -25,7 +28,10 @@ let package = Package(
             ]),
         .testTarget(
             name: "WebResponseTests",
-            dependencies: ["WebResponse"]
+            dependencies: [
+                "WebResponse",
+                .product(name: "Swifter", package: "Swifter")
+            ]
         )
     ]
 )

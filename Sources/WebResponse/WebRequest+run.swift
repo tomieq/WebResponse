@@ -51,6 +51,11 @@ extension WebRequest {
             for (key, value) in headers ?? [:] {
                 allHeaders[key] = value
             }
+            if case .basic(let login, let password) = self.credentials {
+                let rawValue = "\(login):\(password)"
+                let encodedValue = Data(rawValue.utf8).base64EncodedString()
+                allHeaders["Authorization"] = "Basic \(encodedValue)"
+            }
             return allHeaders
         }()
         return request
@@ -60,6 +65,7 @@ extension WebRequest {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = self.timeout
         config.timeoutIntervalForResource = self.timeout
+        config.urlCredentialStorage = nil
         #if MACOS
         if let proxy = self.proxy {
             let proxyConfig: [AnyHashable: Any] = [
@@ -77,8 +83,17 @@ extension WebRequest {
         return config
     }
 
-    private func response(data: Data?, response: URLResponse?, error: Error?) -> WebResponse<T> {
+    private func response(
+        data: Data?,
+        response: URLResponse?,
+        error: Error?,
+        sessionDelegate: WebAuthDelegate
+    ) -> WebResponse<T> {
         if let error = error as? NSError {
+            if error.code == NSURLErrorCancelled,
+               let authenticationFailure = sessionDelegate.authenticationFailure {
+                return .failure(authenticationFailure)
+            }
             return .failure(HttpError.make(from: error.code))
         }
         guard let response = (response as? HTTPURLResponse) else {
@@ -129,8 +144,10 @@ extension WebRequest {
             callback(.failure(.invalidUrl))
             return nil
         }
-        let task: URLSessionDataTask = URLSession(configuration: sessionConfiguration()).dataTask(with: request) { data, response, error in
-            callback(self.response(data: data, response: response, error: error))
+        let sessionDelegate = WebAuthDelegate(credentials: credentials)
+        let session = URLSession(configuration: sessionConfiguration(), delegate: sessionDelegate, delegateQueue: nil)
+        let task: URLSessionDataTask = session.dataTask(with: request) { data, response, error in
+            callback(self.response(data: data, response: response, error: error, sessionDelegate: sessionDelegate))
         }
         task.resume()
         return task
