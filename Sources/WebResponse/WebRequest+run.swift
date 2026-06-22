@@ -36,7 +36,10 @@ private final class URLSessionDataTaskHolder: @unchecked Sendable {
 
 extension WebRequest {
     private static var defaultHeaders: [String: String] {
-        ["Content-Type": "application/json"]
+        [
+            "Content-Type": "application/json",
+            "Connection": "close"
+        ]
     }
 
     private func request(url: String, method: String, body: Data?, headers: [String: String]?) -> URLRequest? {
@@ -102,9 +105,12 @@ extension WebRequest {
         let statusCode = response.statusCode
         let headers = response.allHeaderFields as? [String: String] ?? [:]
         if statusCode >= 200, statusCode < 300 {
+            if let data, T.self == Data.self, let body = data as? T {
+                return .response(body: body, headers: headers)
+            }
             if let json = data {
-                if json.isEmpty, "\(T.self)" == "\(EmptyBody.self)" {
-                    return .response(body: try! .init(json: "{}"), headers: headers)
+                if json.isEmpty, T.self == EmptyBody.self, let body = EmptyBody() as? T {
+                    return .response(body: body, headers: headers)
                 } else if let object = try? T(json: json) {
                     return .response(body: object, headers: headers)
                 } else {
