@@ -15,13 +15,17 @@ let package = Package(
             targets: ["WebResponse"])
     ],
     dependencies: [
-        .package(url: "https://github.com/tomieq/swifter.git", .upToNextMajor(from: "3.2.0"))
+        .package(url: "https://github.com/tomieq/swifter.git", .upToNextMajor(from: "3.2.0")),
+        .package(url: "https://github.com/apple/swift-crypto.git", .upToNextMajor(from: "3.0.0"))
     ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
         // Targets can depend on other targets in this package and products from dependencies.
         .target(
             name: "WebResponse",
+            dependencies: [
+                .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux]))
+            ],
             swiftSettings: [
                 .define("LINUX", .when(platforms: [.linux])),
                 .define("MACOS", .when(platforms: [.macOS]))

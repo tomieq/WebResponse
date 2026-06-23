@@ -10,6 +10,7 @@ import Foundation
 import FoundationNetworking
 #endif
 
+#if MACOS
 final class WebAuthDelegate: NSObject, URLSessionTaskDelegate {
     private let credentials: WebCredentials?
     private let lock = NSLock()
@@ -60,3 +61,4 @@ final class WebAuthDelegate: NSObject, URLSessionTaskDelegate {
         completionHandler(.useCredential, credential)
     }
 }
+#endif

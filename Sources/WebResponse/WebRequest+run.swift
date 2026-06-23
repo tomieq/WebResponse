@@ -9,12 +9,12 @@ import Foundation
 import FoundationNetworking
 #endif
 
-private final class URLSessionDataTaskHolder: @unchecked Sendable {
+final class URLSessionRequestHandle: @unchecked Sendable {
     private let lock = NSLock()
-    private var task: URLSessionDataTask?
+    private var task: URLSessionTask?
     private var isCancelled = false
 
-    func set(_ task: URLSessionDataTask?) {
+    func replaceTask(_ task: URLSessionTask?) {
         self.lock.lock()
         if self.isCancelled {
             task?.cancel()
@@ -31,6 +31,31 @@ private final class URLSessionDataTaskHolder: @unchecked Sendable {
         self.task = nil
         self.lock.unlock()
         task?.cancel()
+    }
+}
+
+private final class URLSessionRequestHandleHolder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var handle: URLSessionRequestHandle?
+    private var isCancelled = false
+
+    func set(_ handle: URLSessionRequestHandle?) {
+        self.lock.lock()
+        if self.isCancelled {
+            handle?.cancel()
+        } else {
+            self.handle = handle
+        }
+        self.lock.unlock()
+    }
+
+    func cancel() {
+        self.lock.lock()
+        self.isCancelled = true
+        let handle = self.handle
+        self.handle = nil
+        self.lock.unlock()
+        handle?.cancel()
     }
 }
 
@@ -90,11 +115,12 @@ extension WebRequest {
         data: Data?,
         response: URLResponse?,
         error: Error?,
-        sessionDelegate: WebAuthDelegate
+        authenticationFailure: HttpError? = nil,
+        suppressUnauthorizedBody: Bool = false
     ) -> WebResponse<T> {
         if let error = error as? NSError {
             if error.code == NSURLErrorCancelled,
-               let authenticationFailure = sessionDelegate.authenticationFailure {
+               let authenticationFailure {
                 return .failure(authenticationFailure)
             }
             return .failure(HttpError.make(from: error.code))
@@ -120,22 +146,117 @@ extension WebRequest {
                 return .failure(.unserializablaResponse(data))
             }
         } else {
-            let body = String(data: data ?? Data(), encoding: .utf8)
+            let body: String?
+            if suppressUnauthorizedBody, statusCode == 401 {
+                body = nil
+            } else {
+                body = String(data: data ?? Data(), encoding: .utf8)
+            }
             return .failure(.invalidHttpCode(code: statusCode, body: body))
         }
+    }
+
+    private func makeSession() -> URLSession {
+        URLSession(configuration: self.sessionConfiguration(), delegate: nil, delegateQueue: nil)
+    }
+
+    #if MACOS
+    private func executeMacOSDigestRequest(
+        request: URLRequest,
+        handle: URLSessionRequestHandle,
+        callback: @escaping (WebResponse<T>) -> Void
+    ) {
+        let sessionDelegate = WebAuthDelegate(credentials: credentials)
+        let session = URLSession(configuration: sessionConfiguration(), delegate: sessionDelegate, delegateQueue: nil)
+        let task = session.dataTask(with: request) { data, response, error in
+            callback(self.response(
+                data: data,
+                response: response,
+                error: error,
+                authenticationFailure: sessionDelegate.authenticationFailure
+            ))
+        }
+        handle.replaceTask(task)
+        task.resume()
+    }
+    #endif
+
+    private func execute(
+        request: URLRequest,
+        using session: URLSession,
+        handle: URLSessionRequestHandle,
+        callback: @escaping (WebResponse<T>) -> Void
+    ) {
+        let task = session.dataTask(with: request) { data, response, error in
+            if let retryRequest = self.digestRetryRequest(for: request, response: response, error: error) {
+                self.executeDigestRetry(
+                    request: retryRequest,
+                    using: session,
+                    handle: handle,
+                    callback: callback
+                )
+                return
+            }
+
+            callback(self.response(data: data, response: response, error: error))
+        }
+        handle.replaceTask(task)
+        task.resume()
+    }
+
+    private func executeDigestRetry(
+        request: URLRequest,
+        using session: URLSession,
+        handle: URLSessionRequestHandle,
+        callback: @escaping (WebResponse<T>) -> Void
+    ) {
+        let task = session.dataTask(with: request) { data, response, error in
+            callback(self.response(
+                data: data,
+                response: response,
+                error: error,
+                suppressUnauthorizedBody: true
+            ))
+        }
+        handle.replaceTask(task)
+        task.resume()
+    }
+
+    private func digestRetryRequest(
+        for request: URLRequest,
+        response: URLResponse?,
+        error: Error?
+    ) -> URLRequest? {
+        guard error == nil,
+              let credentials,
+              case .digest = credentials,
+              request.value(forHTTPHeaderField: "Authorization") == nil,
+              let response = response as? HTTPURLResponse,
+              response.statusCode == 401,
+              let authorizationHeader = WebDigestAuthorization.authorizationHeader(
+                  for: request,
+                  response: response,
+                  credentials: credentials
+              ) else {
+            return nil
+        }
+
+        var retryRequest = request
+        retryRequest.setValue(authorizationHeader, forHTTPHeaderField: "Authorization")
+        return retryRequest
     }
 
     func run(url: String, method: String, body: Data? = nil, headers: [String: String]? = nil) -> WebResponse<T> {
         let semaphore = DispatchSemaphore(value: 0)
         var result: WebResponse<T>?
-        let task = self.run(url: url, method: method, body: body, headers: headers) {
+        let requestHandle = self.run(url: url, method: method, body: body, headers: headers) {
             result = $0
             semaphore.signal()
         }
         let waitResult = semaphore.wait(timeout: .now() + .seconds(Int(self.timeout)))
         if case .timedOut = waitResult {
             print("Request timed out")
-            task?.cancel()
+            requestHandle?.cancel()
             return .failure(.timeoutError)
         }
         return result ?? .failure(.other)
@@ -145,31 +266,34 @@ extension WebRequest {
              method: String,
              body: Data? = nil,
              headers: [String: String]? = nil,
-             callback: @escaping (WebResponse<T>) -> Void) -> URLSessionDataTask? {
+             callback: @escaping (WebResponse<T>) -> Void) -> URLSessionRequestHandle? {
         guard let request = request(url: url, method: method, body: body, headers: headers) else {
             callback(.failure(.invalidUrl))
             return nil
         }
-        let sessionDelegate = WebAuthDelegate(credentials: credentials)
-        let session = URLSession(configuration: sessionConfiguration(), delegate: sessionDelegate, delegateQueue: nil)
-        let task: URLSessionDataTask = session.dataTask(with: request) { data, response, error in
-            callback(self.response(data: data, response: response, error: error, sessionDelegate: sessionDelegate))
+        let handle = URLSessionRequestHandle()
+        #if MACOS
+        if let credentials, case .digest = credentials {
+            self.executeMacOSDigestRequest(request: request, handle: handle, callback: callback)
+            return handle
         }
-        task.resume()
-        return task
+        #endif
+        let session = self.makeSession()
+        self.execute(request: request, using: session, handle: handle, callback: callback)
+        return handle
     }
 
     func run(url: String, method: String, body: Data? = nil, headers: [String: String]? = nil) async -> WebResponse<T> {
-        let taskHolder = URLSessionDataTaskHolder()
+        let handleHolder = URLSessionRequestHandleHolder()
         return await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
-                let task = self.run(url: url, method: method, body: body, headers: headers) { response in
+                let handle = self.run(url: url, method: method, body: body, headers: headers) { response in
                     continuation.resume(returning: response)
                 }
-                taskHolder.set(task)
+                handleHolder.set(handle)
             }
         } onCancel: {
-            taskHolder.cancel()
+            handleHolder.cancel()
         }
     }
 }
