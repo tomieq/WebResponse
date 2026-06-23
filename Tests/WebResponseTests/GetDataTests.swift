@@ -13,9 +13,11 @@ import Foundation
 @Suite(.serialized)
 class GetDataTests {
     let server = HttpServer()
+    let port: UInt16
 
-    init() throws {
-        try self.server.start(8082)
+    init() async throws {
+        self.port = await PortManager.shared.openPort
+        try self.server.start(self.port)
         self.server.middleware.append { request, header in
             print("Request \(request.id) \(request.method) \(request.path) from \(request.clientIP ?? "")")
             request.onFinished { summary in
@@ -39,7 +41,7 @@ class GetDataTests {
 
         let response = WebResponse<Data>
             .default
-            .get(url: "http://localhost:8082/data")
+            .get(url: "http://localhost:\(self.port)/data")
         switch response {
         case .failure(let error):
             Issue.record("Error: \(error)")

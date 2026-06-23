@@ -16,9 +16,11 @@ class AuthTests {
 
     let server = HttpServer()
     var requestCounter = 0
+    let port: UInt16
 
-    init() throws {
-        try self.server.start(8081)
+    init() async throws {
+        self.port = await PortManager.shared.openPort
+        try self.server.start(self.port)
         self.server.middleware.append { [unowned self] request, header in
             print("Request \(request.id) \(request.method) \(request.path) from \(request.clientIP ?? "")")
             self.requestCounter += 1
@@ -51,7 +53,7 @@ class AuthTests {
         let response = WebResponse<ServerResponse>
             .default
             .withCredentials(.basic(login: "user", password: "12345"))
-            .get(url: "http://localhost:8081/basic")
+            .get(url: "http://localhost:\(self.port)/basic")
         switch response {
         case .failure(let error):
             Issue.record("Error: \(error)")
@@ -79,7 +81,7 @@ class AuthTests {
         let response = WebResponse<ServerResponse>
             .default
             .withCredentials(.basic(login: "user", password: "123456"))
-            .get(url: "http://localhost:8081/basic")
+            .get(url: "http://localhost:\(self.port)/basic")
         switch response {
         case .failure(let error):
             #expect(error == .invalidHttpCode(code: 401, body: "Please authorize with basic"))
@@ -105,7 +107,7 @@ class AuthTests {
         let response = WebResponse<ServerResponse>
             .default
             .withCredentials(.digest(login: "user", password: "12345"))
-            .get(url: "http://localhost:8081/digest")
+            .get(url: "http://localhost:\(self.port)/digest")
         switch response {
         case .failure(let error):
             Issue.record("Error: \(error)")
@@ -131,7 +133,7 @@ class AuthTests {
         let response = WebResponse<ServerResponse>
             .default
             .withCredentials(.digest(login: "user", password: "123456"))
-            .get(url: "http://localhost:8081/digest")
+            .get(url: "http://localhost:\(self.port)/digest")
         switch response {
         case .failure(let error):
             #expect(error == .invalidHttpCode(code: 401, body: nil))
