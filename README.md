@@ -26,10 +26,6 @@ case .failure(let error):
 
 ### Async/await
 
-```swift
-let response = await WebResponse<SampleDto>.default.get(url: "https://jsonplaceholder.typicode.com/todos/1")
-```
-
 Async methods are available for `GET`, `POST`, and `PUT`:
 
 ```swift
@@ -55,6 +51,23 @@ let putResponse = await WebResponse<SampleDto>.default.put(
 
 Async calls return `WebResponse<T>` and do not throw. Network, HTTP, and decoding errors are returned as `.failure(HttpError)`.
 
+### Custom headers
+
+All request methods accept an optional `headers` parameter:
+
+```swift
+let response = WebResponse<SampleDto>.default.get(
+    url: "https://example.com/resource",
+    headers: ["Accept": "application/json", "X-Custom": "value"]
+)
+
+let postResponse = await WebResponse<SampleDto>.default.post(
+    url: "https://example.com/items",
+    body: request,
+    headers: ["Authorization": "Bearer token"]
+)
+```
+
 ### Closure version
 
 ```swift
@@ -65,6 +78,27 @@ WebResponse<SampleDto>.default.get(url: "https://jsonplaceholder.typicode.com/to
     case .failure(let error):
         print(error)
     }
+}
+```
+
+Closure-based callbacks are also available for POST and PUT, with both `Encodable` and `Data` body types:
+
+```swift
+WebResponse<SampleDto>.default.post(
+    url: "https://example.com/items",
+    body: request
+) { result in
+    switch result {
+    case .response(let body, _): print(body)
+    case .failure(let error): print(error)
+    }
+}
+
+WebResponse<SampleDto>.default.put(
+    url: "https://example.com/items/1",
+    body: Data()
+) { result in
+    // handle result
 }
 ```
 
@@ -89,13 +123,25 @@ let putResponse = WebResponse<SampleDto>.default.put(
 )
 ```
 
-You can also pass raw `Data` as the request body:
+You can also pass raw `Data` as the request body. Async and closure variants are available as well:
 
 ```swift
 let response = WebResponse<SampleDto>.default.post(
     url: "https://example.com/posts",
     body: Data()
 )
+
+let asyncResponse = await WebResponse<SampleDto>.default.put(
+    url: "https://example.com/posts/1",
+    body: Data()
+)
+
+WebResponse<SampleDto>.default.post(
+    url: "https://example.com/posts",
+    body: Data()
+) { result in
+    // handle result
+}
 ```
 
 ### Custom timeout
@@ -115,6 +161,31 @@ let response = WebResponse<SampleDto>
     .get(url: "https://jsonplaceholder.typicode.com/todos/1")
 ```
 
+### Authentication
+
+The library supports HTTP Basic and Digest authentication.
+
+```swift
+// Basic auth
+let basicResponse = WebResponse<SampleDto>.default
+    .withCredentials(.basic(login: "user", password: "pass"))
+    .get(url: "https://example.com/protected")
+
+// Digest auth (macOS only)
+let digestResponse = WebResponse<SampleDto>.default
+    .withCredentials(.digest(login: "user", password: "pass"))
+    .get(url: "https://example.com/digest-protected")
+```
+
+`withCredentials` can be chained with other modifiers:
+
+```swift
+let response = WebResponse<SampleDto>
+    .withTimeout(5)
+    .withCredentials(.basic(login: "user", password: "pass"))
+    .get(url: "https://example.com/protected")
+```
+
 ### Empty response
 
 Use `EmptyBody` when the endpoint returns an empty response body.
@@ -122,6 +193,37 @@ Use `EmptyBody` when the endpoint returns an empty response body.
 ```swift
 let response = WebResponse<EmptyBody>.withTimeout(3).get(url: "https://jsonplaceholder.typicode.com/todos/1")
 ```
+
+### Raw Data response
+
+Use `WebResponse<Data>` when you need the raw response bytes instead of decoding JSON:
+
+```swift
+let response = WebResponse<Data>.default.get(url: "https://example.com/image.jpg")
+switch response {
+case .response(let body, _):
+    print("Got \(body.count) bytes")
+case .failure(let error):
+    print(error)
+}
+```
+
+### Error handling
+
+All methods return `WebResponse<T>` containing either `.response(body:headers:)` or `.failure(HttpError)`. The possible error cases are:
+
+| Error | Description |
+|-------|-------------|
+| `.invalidUrl` | The provided URL string could not be parsed |
+| `.timeoutError` | Request timed out |
+| `.noInternet` | No internet connection or network was lost |
+| `.dnsError` | DNS lookup failed |
+| `.serverIsDown` | Cannot connect to the host |
+| `.sslError` | SSL/TLS error (untrusted certificate, etc.) |
+| `.invalidHttpCode(code, body)` | Non-2xx HTTP status code with optional response body |
+| `.proxyError` | Proxy connection error |
+| `.unserializablaResponse(Data?)` | Response could not be decoded into the expected type |
+| `.other` | An unspecified error occurred |
 
 ## Swift Package Manager
 
